@@ -8,6 +8,7 @@ import com.unciv.UncivGame
 import com.unciv.logic.multiplayer.FriendList
 import com.unciv.logic.multiplayer.chat.ChatWebSocket
 import com.unciv.models.UncivSound
+import com.unciv.online.OnlineServer
 import com.unciv.models.translations.TranslationCache
 import com.unciv.models.translations.tr
 import com.unciv.ui.components.fonts.FontFamilyData
@@ -15,6 +16,7 @@ import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.components.input.KeyboardBindings
 import com.unciv.ui.screens.worldscreen.NotificationsScroll
 import com.unciv.utils.Display
+import com.unciv.utils.Log
 import com.unciv.utils.ScreenOrientation
 import java.awt.Rectangle
 import yairm210.purity.annotations.Readonly
@@ -419,7 +421,8 @@ class GameSettings {
         @Suppress("unused")  // @GGuenni knows what he intended with this field
         var userName: String = ""
 
-        private var server = Constants.uncivXyzServer
+        /** Unciv Online: our own server, baked into the build (see [OnlineServer.defaultServerUrl]) */
+        private var server = OnlineServer.defaultServerUrl
         fun getServer() = server
         fun setServer(value: String) {
             if (server != value) {
@@ -428,7 +431,30 @@ class GameSettings {
             }
         }
 
+        /** Unciv Online: the baked-in default server this install last switched to */
+        private var appliedDefaultServer = ""
+
+        /**
+         * Unciv Online: a newer APK may bake in a new server address (e.g. test address -> Tailscale Funnel).
+         * Follow it as long as the player did not type a different address by hand.
+         */
+        fun applyBakedDefaultServer() {
+            val baked = OnlineServer.defaultServerUrl
+            if (appliedDefaultServer == baked) return
+            val followsDefault = server == appliedDefaultServer || server == Constants.uncivXyzServer
+                || server == Constants.dropboxMultiplayerServer || appliedDefaultServer.isEmpty() && server == baked
+            if (followsDefault) {
+                Log.info(OnlineServer.tag, "Default server changed: '%s' -> '%s' (previous default '%s')", server, baked, appliedDefaultServer)
+                server = baked
+            } else {
+                Log.info(OnlineServer.tag, "Keeping server '%s' set by hand; new default '%s' not applied", server, baked)
+            }
+            appliedDefaultServer = baked
+        }
+
         val friendList: MutableList<FriendList.Friend> = mutableListOf()
+        /** Unciv Online: lobby games already added to (or deliberately removed from) the multiplayer list */
+        val lobbyGamesSeen: HashSet<String> = hashSetOf()
         var turnCheckerEnabled = true
         var turnCheckerPersistentNotificationEnabled = true
         var turnCheckerDelay: Duration = Duration.ofMinutes(5)

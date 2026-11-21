@@ -109,7 +109,8 @@ class GameOptionsTable(
 
         val checkboxTable = Table().apply { defaults().left().pad(2.5f) }
         val selectBoxTable = Table()
-        if (UncivGame.Current.supportsOnlineMultiplayer)
+        // Unciv Online: a lobby game is always online multiplayer - no checkbox to turn it off
+        if (UncivGame.Current.supportsOnlineMultiplayer && (previousScreen as? NewGameScreen)?.lobbyMode != true)
             checkboxTable.addIsOnlineMultiplayerCheckbox()
         if (gameParameters.isOnlineMultiplayer){
             checkboxTable.addAnyoneCanSpectateCheckbox()

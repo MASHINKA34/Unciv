@@ -22,6 +22,8 @@ import com.unciv.models.metadata.Player
 import com.unciv.models.ruleset.Ruleset
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.translations.tr
+import com.unciv.online.LobbyClient
+import com.unciv.online.OnlineServer
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.addSeparatorVertical
 import com.unciv.ui.components.extensions.disable
@@ -34,12 +36,15 @@ import com.unciv.ui.components.input.keyShortcuts
 import com.unciv.ui.components.input.onActivation
 import com.unciv.ui.components.input.onClick
 import com.unciv.ui.components.widgets.ExpanderTab
+import com.unciv.ui.components.widgets.UncivTextField
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.ConfirmPopup
 import com.unciv.ui.popups.Popup
 import com.unciv.ui.popups.ToastPopup
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.basescreen.RecreateOnResize
+import com.unciv.ui.screens.multiplayerscreens.lobby.LobbyHelpers
+import com.unciv.ui.screens.multiplayerscreens.lobby.LobbyScreen
 import com.unciv.ui.screens.pickerscreens.PickerScreen
 import com.unciv.utils.Concurrency
 import com.unciv.utils.Log
@@ -50,11 +55,19 @@ import java.net.URI
 import kotlin.math.floor
 import com.unciv.ui.components.widgets.AutoScrollPane as ScrollPane
 
+/**
+ * @param lobbyMode Unciv Online: the host picks the settings for a lobby instead of starting a game.
+ *   Always online multiplayer, no player ID fields; every Human slot is a seat for a lobby member.
+ *   The button creates the lobby; the game itself is started later from [LobbyScreen].
+ */
 class NewGameScreen(
-    defaultGameSetupInfo: GameSetupInfo? = null
+    defaultGameSetupInfo: GameSetupInfo? = null,
+    val lobbyMode: Boolean = false
 ): IPreviousScreen, PickerScreen(), RecreateOnResize {
 
-    override val gameSetupInfo = defaultGameSetupInfo ?: GameSetupInfo.fromSettings()
+    override val gameSetupInfo = (defaultGameSetupInfo ?: GameSetupInfo.fromSettings()).apply {
+        if (lobbyMode) gameParameters.isOnlineMultiplayer = true
+    }
     override val ruleset = Ruleset()  // updateRuleset will clear and add
     private val newGameOptionsTable: GameOptionsTable
     internal val playerPickerTable: PlayerPickerTable
@@ -114,19 +127,31 @@ class NewGameScreen(
                     val gameSetupInfo = GameSetupInfo().apply {
                         gameParameters.espionageEnabled = true
                     }
-                    game.replaceCurrentScreen{ NewGameScreen(gameSetupInfo) }
+                    game.replaceCurrentScreen{ NewGameScreen(gameSetupInfo, lobbyMode) }
                 }.open(true)
             }
             horizontalGroup.addActor(resetToDefaultsButton)
         }
 
-        val startGameButton = "Start game!".toTextButton().apply { color = Color.GREEN }        
-        startGameButton.onClick(this::startGameAvoidANRs)
+        val startGameButton = (if (lobbyMode) "Create lobby" else "Start game!").toTextButton().apply { color = Color.GREEN }
+        startGameButton.onClick(if (lobbyMode) this::createLobbyAvoidANRs else this::startGameAvoidANRs)
         horizontalGroup.addActor(startGameButton)
         pickerPane.rightSideButton.remove()
+        if (lobbyMode) Log.info(OnlineServer.tag, "New game screen opened in lobby mode")
     }
 
-    private fun startGameAvoidANRs(){
+    private fun startGameAvoidANRs() = validateThen { startGame() }
+
+    /** Unciv Online: same checks as for a new game, then ask for the lobby name and create the lobby */
+    private fun createLobbyAvoidANRs() = validateThen {
+        Concurrency.runOnGLThread {
+            Gdx.input.inputProcessor = stage
+            askLobbyNameAndCreate()
+        }
+    }
+
+    /** Runs the (slow) validity checks off the GL thread, then [onValid] - also off the GL thread */
+    private fun validateThen(onValid: () -> Unit){
         // Don't allow players to click the game while we're checking if it's ok
         Gdx.input.inputProcessor = null
         mapOptionsTable.cancelBackgroundJobs()
@@ -152,14 +177,53 @@ class NewGameScreen(
                         this@NewGameScreen, modCheckResult,
                         action = {
                             gameSetupInfo.gameParameters.acceptedModCheckErrors = modCheckResult
-                            startGameAvoidANRs()
+                            validateThen(onValid)
                         }
                     )
                     Gdx.input.inputProcessor = stage
                 }
                 return@run
             }
-            startGame()
+            onValid()
+        }
+    }
+
+    private fun askLobbyNameAndCreate() {
+        val popup = Popup(this)
+        popup.addGoodSizedLabel("Lobby name").colspan(2).row()
+        val nameField = UncivTextField("Lobby name", "Game of [${LobbyClient.playerName()}]".tr())
+        nameField.maxLength = LobbyClient.MAX_LOBBY_NAME
+        popup.add(nameField).colspan(2).width(stage.width / 2).pad(10f).row()
+        popup.addCloseButton()
+        popup.addOKButton("Create lobby", validate = { nameField.text.trim().isNotEmpty() }) {
+            createLobby(nameField.text.trim())
+        }
+        popup.equalizeLastTwoButtonWidths()
+        popup.open(force = true)
+        stage.keyboardFocus = nameField
+    }
+
+    private fun createLobby(lobbyName: String) {
+        // Snapshot of the settings - the host keeps it in memory until pressing Start in the lobby
+        val setup = GameSetupInfo(gameSetupInfo).also { it.mapFile = gameSetupInfo.mapFile }
+        val seats = LobbyHelpers.seatCount(setup)
+        val popup = Popup(this)
+        popup.addGoodSizedLabel(Constants.working).row()
+        popup.open(force = true)
+        Log.info(OnlineServer.tag, "Creating lobby '%s': seats=%d players=%s", lobbyName, seats,
+            setup.gameParameters.players.joinToString { "${it.chosenCiv}/${it.playerType}" })
+        Concurrency.run("CreateLobby") {
+            try {
+                val lobby = LobbyClient.create(lobbyName, seats, LobbyHelpers.settingsSummary(setup))
+                LobbyHelpers.hostSetups[lobby.id] = setup
+                launchOnGLThread {
+                    popup.close()
+                    game.replaceCurrentScreen { LobbyScreen(lobby) }
+                }
+            } catch (ex: Exception) {
+                val message = LobbyHelpers.errorText(ex)
+                launchOnGLThread { popup.reuseWith(message, true) }
+            }
         }
     }
     
@@ -170,9 +234,17 @@ class NewGameScreen(
 
         if (gameSetupInfo.gameParameters.isOnlineMultiplayer) {
             if (!checkConnectionToMultiplayerServer())
-                return if (Multiplayer.usesCustomServer()) "Couldn't connect to Multiplayer Server!"
+                return if (Multiplayer.usesCustomServer()) OnlineServer.SERVER_OFFLINE_MESSAGE
                     else "Couldn't connect to Dropbox!"
+        }
 
+        if (lobbyMode) {
+            // Players and their IDs come from the lobby later - only the seats matter here
+            if (LobbyHelpers.seatCount(gameSetupInfo) < LobbyClient.MIN_PLAYERS_TO_START)
+                return "Add at least 2 Human players: each Human slot is a seat in the lobby"
+            if (mapOptionsTable.getSelectedScenario() != null)
+                return "Scenarios are not supported in lobbies"
+        } else if (gameSetupInfo.gameParameters.isOnlineMultiplayer) {
             for (player in gameSetupInfo.gameParameters.players.filter { it.playerType == PlayerType.Human }) {
                 if (!(IdChecker.checkAndReturnPlayerUuid(player.playerId)?.playerID?.isUUID() ?: false)) {
                     return "Invalid player ID!"
@@ -287,15 +359,16 @@ class NewGameScreen(
     }
 
     private fun checkConnectionToMultiplayerServer(): Boolean {
+        val multiplayerServer = UncivGame.Current.settings.multiplayer.getServer()
         return try {
-            val multiplayerServer = UncivGame.Current.settings.multiplayer.getServer()
             val u = URI(if (Multiplayer.usesDropbox()) "https://content.dropboxapi.com" else multiplayerServer).toURL()
             val con = u.openConnection()
             con.connectTimeout = 3000
             con.connect()
 
             true
-        } catch(_: Throwable) {
+        } catch(ex: Throwable) {
+            Log.warn(OnlineServer.tag, "New game: cannot connect to multiplayer server %s - %s: %s", multiplayerServer, ex::class.simpleName, ex.message)
             false
         }
     }
@@ -475,5 +548,5 @@ class NewGameScreen(
         newGameOptionsTable.update()
     }
 
-    override fun recreate(): BaseScreen = NewGameScreen(gameSetupInfo)
+    override fun recreate(): BaseScreen = NewGameScreen(gameSetupInfo, lobbyMode)
 }

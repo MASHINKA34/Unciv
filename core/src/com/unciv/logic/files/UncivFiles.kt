@@ -337,7 +337,9 @@ class UncivFiles(
             }
         }
 
-        return settings ?: GameSettings().apply { isFreshlyCreated = true }
+        val result = settings ?: GameSettings().apply { isFreshlyCreated = true }
+        result.multiplayer.applyBakedDefaultServer()
+        return result
     }
 
     fun setGeneralSettings(gameSettings: GameSettings) {

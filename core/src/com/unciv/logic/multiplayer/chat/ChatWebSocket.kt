@@ -174,6 +174,8 @@ object ChatWebSocket {
                     HttpHeaders.Authorization,
                     UncivGame.Current.settings.multiplayer.getAuthHeader()
                 )
+                // Unciv Online: the server rejects every request without the shared key
+                for ((name, value) in com.unciv.online.OnlineServer.keyHeader()) header(name, value)
             }
 
             session!!.runCatching {

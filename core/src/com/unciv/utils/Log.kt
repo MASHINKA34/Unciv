@@ -157,6 +157,26 @@ object Log {
     }
 
     /**
+     * Unciv Online: logs a key event at info level. Unlike [debug], it is written in release builds too,
+     * so network and lobby problems can be traced from logcat alone. Same formatting rules as [debug].
+     */
+    fun info(tag: Tag, msg: String, vararg params: Any?) {
+        val formatArgs = replaceLambdasWithValues(params)
+        doLog(backend::info, tag, msg, *formatArgs)
+    }
+
+    /** Unciv Online: like [info], for unusual situations that were handled. */
+    fun warn(tag: Tag, msg: String, vararg params: Any?) {
+        val formatArgs = replaceLambdasWithValues(params)
+        doLog(backend::warn, tag, msg, *formatArgs)
+    }
+
+    /** Unciv Online: like [warn], with the full [throwable] (type, message, stack trace, causes) appended. */
+    fun warn(tag: Tag, msg: String, throwable: Throwable) {
+        doLog(backend::warn, tag, buildThrowableMessage(msg, throwable))
+    }
+
+    /**
      * Get string information about operation system
      */
     fun getSystemInfo(): String {
@@ -169,6 +189,10 @@ class Tag(val name: String)
 interface LogBackend {
     fun debug(tag: Tag, curThreadName: String, msg: String)
     fun error(tag: Tag, curThreadName: String, msg: String)
+    /** Info level, always written (also in release builds) - see [Log.info] */
+    fun info(tag: Tag, curThreadName: String, msg: String) = debug(tag, curThreadName, msg)
+    /** Warning level, always written (also in release builds) - see [Log.warn] */
+    fun warn(tag: Tag, curThreadName: String, msg: String) = error(tag, curThreadName, msg)
 
     /** Do not log on release builds for performance reasons. */
     @Readonly fun isRelease(): Boolean
@@ -185,6 +209,14 @@ open class DefaultLogBackend : LogBackend {
 
     override fun error(tag: Tag, curThreadName: String, msg: String) {
         println("${Instant.now()} [${curThreadName}] [${tag.name}] [ERROR] $msg")
+    }
+
+    override fun info(tag: Tag, curThreadName: String, msg: String) {
+        println("${Instant.now()} [${curThreadName}] [${tag.name}] [INFO] $msg")
+    }
+
+    override fun warn(tag: Tag, curThreadName: String, msg: String) {
+        println("${Instant.now()} [${curThreadName}] [${tag.name}] [WARN] $msg")
     }
 
     override fun isRelease(): Boolean {

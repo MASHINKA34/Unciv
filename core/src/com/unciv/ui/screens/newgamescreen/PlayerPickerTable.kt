@@ -68,6 +68,9 @@ class PlayerPickerTable(
 
     private val friendList = FriendList()
 
+    /** Unciv Online: settings for a lobby - Human slots are seats, IDs are filled in when the game starts */
+    private val isLobbyMode get() = (previousScreen as? NewGameScreen)?.lobbyMode == true
+
     init {
         for (player in gameParameters.players)
             player.playerId = "" // This is to stop people from getting other users' IDs and cheating with them in multiplayer games
@@ -75,6 +78,9 @@ class PlayerPickerTable(
         top()
         gameParameters.shufflePlayerOrder = false
         add("Shuffle Civ Order at Start".toCheckBox(false) { gameParameters.shufflePlayerOrder = it }).padTop(5f).padBottom(5f).row()
+        if (isLobbyMode)
+            add(WrappableLabel("Each Human slot is a seat for a lobby player. The host takes the first one.", civBlocksWidth)
+                .apply { wrap = true }).width(civBlocksWidth).padBottom(5f).row()
         add(ScrollPane(playerListTable).apply { setOverscroll(false, false) }).width(civBlocksWidth)
         update()
         background = BaseScreen.skinStrings.getUiBackground("NewGameScreen/PlayerPickerTable", tintColor = BaseScreen.skinStrings.skinConfig.clearColor)
@@ -235,7 +241,8 @@ class PlayerPickerTable(
             ).pad(5f).right()
         }
 
-        if (gameParameters.isOnlineMultiplayer && player.playerType == PlayerType.Human)
+        // Unciv Online: in lobby mode the player IDs come from the lobby members, no ID fields
+        if (gameParameters.isOnlineMultiplayer && player.playerType == PlayerType.Human && !isLobbyMode)
             playerTable.addPlayerTableMultiplayerControls(player)
 
         return playerTable

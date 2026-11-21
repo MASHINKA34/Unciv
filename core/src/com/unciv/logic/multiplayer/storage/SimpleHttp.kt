@@ -47,7 +47,7 @@ object SimpleHttp {
     class HttpResponse(val code: Int, val body: InputStream)
 
     /** Thrown by [openStream] on a bad URL or error response. [code] is null if there was no HTTP status. */
-    class HttpStatusException(val code: Int?, override val message: String) : Exception(message)
+    class HttpStatusException(val code: Int?, override val message: String, cause: Throwable? = null) : Exception(message, cause)
 
     /**
      * Sends the request and returns as soon as the response headers arrive, so the body can be processed as it arrives.
@@ -68,6 +68,9 @@ object SimpleHttp {
         with(urlObj.openConnection() as HttpURLConnection) {
             requestMethod = method  // default is GET
             connectTimeout = timeout
+            // Unciv Online: without a read timeout a half-open connection (e.g. a relay that accepted TCP
+            // but cannot reach the host PC) would hang forever instead of reporting "server is off"
+            readTimeout = timeout
             instanceFollowRedirects = true
             setRequestProperty(HttpHeaders.UserAgent, UncivGame.getUserAgent("Turn-Checker"))
             setRequestProperty(HttpHeaders.ContentType, "text/plain")
@@ -97,7 +100,7 @@ object SimpleHttp {
                     ?: t.message ?: "Unknown error"
                 val code = try { responseCode } catch (_: IOException) { null }
                 disconnect()
-                throw HttpStatusException(code, errorMessage)
+                throw HttpStatusException(code, errorMessage, t)
             }
         }
     }

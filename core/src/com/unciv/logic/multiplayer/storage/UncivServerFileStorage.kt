@@ -2,36 +2,58 @@ package com.unciv.logic.multiplayer.storage
 
 import com.badlogic.gdx.Net
 import com.badlogic.gdx.utils.Base64Coder
+import com.unciv.online.OnlineServer
+import com.unciv.utils.Log
 import com.unciv.utils.debug
 import java.io.InputStream
 
+/**
+ * File storage on an APIv1 server (UncivServer).
+ * Unciv Online: every request also carries the shared key ([OnlineServer.withKey]); an unreachable server
+ * becomes [com.unciv.online.MultiplayerServerOfflineException], a rejected key [com.unciv.online.OnlineKeyRejectedException].
+ */
 object UncivServerFileStorage : FileStorage {
     var authHeader: Map<String, String>? = null
     var serverUrl: String = ""
     var timeout: Int = 30000
 
+    private val tag = OnlineServer.tag
+
+    private fun headers() = OnlineServer.withKey(authHeader)
+
     override fun saveFileData(fileName: String, data: String) {
-        SimpleHttp.sendRequest(Net.HttpMethods.PUT, fileUrl(fileName), content=data, timeout=timeout, header=authHeader) {
+        val url = fileUrl(fileName)
+        val start = System.currentTimeMillis()
+        Log.info(tag, "Upload start: file=%s size=%d chars url=%s", fileName, data.length, url)
+        SimpleHttp.sendRequest(Net.HttpMethods.PUT, url, content=data, timeout=timeout, header=headers()) {
                 success, result, code ->
             if (!success) {
-                debug("Error from UncivServer during save: %s", result)
+                Log.warn(tag, "Upload failed: file=%s code=%s in %dms reason=%s", fileName, code, System.currentTimeMillis() - start, result.take(500))
+                OnlineServer.classifyFailure("Upload $fileName", url, code, result)?.let { throw it }
                 when (code) {
                     401 -> throw MultiplayerAuthException(Exception(result))
                     else -> throw Exception("$code $result")
                 }
             }
+            Log.info(tag, "Upload done: file=%s code=%s in %dms", fileName, code, System.currentTimeMillis() - start)
         }
     }
 
     override fun loadFileData(fileName: String): InputStream {
+        val url = fileUrl(fileName)
+        val start = System.currentTimeMillis()
         try {
-            return SimpleHttp.openStream(Net.HttpMethods.GET, fileUrl(fileName), "", timeout, authHeader).body
+            val response = SimpleHttp.openStream(Net.HttpMethods.GET, url, "", timeout, headers())
+            debug("Download headers received: file=%s code=%s in %dms", fileName, response.code, System.currentTimeMillis() - start)
+            return response.body
         } catch (ex: SimpleHttp.HttpStatusException) {
-            debug("Error from UncivServer during load: %s", ex.message)
-            when (ex.code) {
-                404 -> throw MultiplayerFileNotFoundException(Exception(ex.message))
-                else -> throw Exception(ex.message)
+            if (ex.code == 404) {
+                Log.info(tag, "Download: file=%s not found on server (404) in %dms", fileName, System.currentTimeMillis() - start)
+                throw MultiplayerFileNotFoundException(Exception(ex.message))
             }
+            Log.warn(tag, "Download failed: file=%s code=%s in %dms reason=%s", fileName, ex.code, System.currentTimeMillis() - start, ex.message.take(500))
+            OnlineServer.classifyFailure("Download $fileName", url, ex.code, ex.message, ex.cause)?.let { throw it }
+            throw Exception(ex.message, ex)
         }
     }
 
@@ -40,9 +62,13 @@ object UncivServerFileStorage : FileStorage {
     }
 
     override fun deleteFile(fileName: String) {
-        SimpleHttp.sendRequest(Net.HttpMethods.DELETE, fileUrl(fileName), content="", timeout=timeout, header=authHeader) {
+        val url = fileUrl(fileName)
+        Log.info(tag, "Delete: file=%s url=%s", fileName, url)
+        SimpleHttp.sendRequest(Net.HttpMethods.DELETE, url, content="", timeout=timeout, header=headers()) {
                 success, result, code ->
             if (!success) {
+                Log.warn(tag, "Delete failed: file=%s code=%s reason=%s", fileName, code, result.take(500))
+                OnlineServer.classifyFailure("Delete $fileName", url, code, result)?.let { throw it }
                 when (code) {
                     404 -> throw MultiplayerFileNotFoundException(Exception(result))
                     else -> throw Exception(result)
@@ -55,16 +81,19 @@ object UncivServerFileStorage : FileStorage {
         var authenticated = false
         val preEncodedAuthValue = "$userId:$password"
         authHeader = mapOf("Authorization" to "Basic ${Base64Coder.encodeString(preEncodedAuthValue)}")
-        SimpleHttp.sendGetRequest("$serverUrl/auth", timeout=timeout, header=authHeader) {
+        val url = "$serverUrl/auth"
+        SimpleHttp.sendGetRequest(url, timeout=timeout, header=headers()) {
                 success, result, code ->
             if (!success) {
-                debug("Error from UncivServer during authentication: %s", result)
+                Log.warn(tag, "Authentication failed: userId=%s passwordSet=%s code=%s reason=%s", userId, password.isNotEmpty(), code, result.take(500))
                 authHeader = null
+                OnlineServer.classifyFailure("Authenticate", url, code, result)?.let { throw it }
                 when (code) {
                     401 -> throw MultiplayerAuthException(Exception(result))
                     else -> throw Exception(result)
                 }
             } else {
+                Log.info(tag, "Authentication ok: userId=%s code=%s", userId, code)
                 authenticated = true
             }
         }
@@ -75,13 +104,15 @@ object UncivServerFileStorage : FileStorage {
         var authStatus = AuthStatus.UNKNOWN
         val preEncodedAuthValue = "$userId:$password"
         authHeader = mapOf("Authorization" to "Basic ${Base64Coder.encodeString(preEncodedAuthValue)}")
-        SimpleHttp.sendGetRequest("$serverUrl/auth", timeout = timeout, header = authHeader) { _, _, code ->
-            authStatus = when (code) {
-                200 -> AuthStatus.VERIFIED
-                204 -> AuthStatus.UNREGISTERED
-                401 -> AuthStatus.UNAUTHORIZED
+        SimpleHttp.sendGetRequest("$serverUrl/auth", timeout = timeout, header = headers()) { _, result, code ->
+            authStatus = when {
+                code == 200 -> AuthStatus.VERIFIED
+                code == 204 -> AuthStatus.UNREGISTERED
+                OnlineServer.isBadKeyResponse(code, result) -> AuthStatus.UNKNOWN
+                code == 401 -> AuthStatus.UNAUTHORIZED
                 else -> AuthStatus.UNKNOWN
             }
+            Log.info(tag, "Auth status: userId=%s code=%s -> %s", userId, code, authStatus)
         }
         return authStatus
     }
@@ -91,15 +122,18 @@ object UncivServerFileStorage : FileStorage {
             return false
 
         var setSuccessful = false
-        SimpleHttp.sendRequest(Net.HttpMethods.PUT, "$serverUrl/auth", content=newPassword, timeout=timeout, header=authHeader) {
+        val url = "$serverUrl/auth"
+        SimpleHttp.sendRequest(Net.HttpMethods.PUT, url, content=newPassword, timeout=timeout, header=headers()) {
                 success, result, code ->
             if (!success) {
-                debug("Error from UncivServer during password set: %s", result)
+                Log.warn(tag, "Set password failed: code=%s reason=%s", code, result.take(500))
+                OnlineServer.classifyFailure("Set password", url, code, result)?.let { throw it }
                 when (code) {
                     401 -> throw MultiplayerAuthException(Exception(result))
                     else -> throw Exception(result)
                 }
             } else {
+                Log.info(tag, "Set password ok: code=%s", code)
                 setSuccessful = true
             }
         }

@@ -31,6 +31,7 @@ import com.unciv.logic.GameInfo
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.multiplayer.storage.FileStorageRateLimitReached
 import com.unciv.logic.multiplayer.storage.MultiplayerServer
+import com.unciv.online.MultiplayerServerOfflineException
 import com.unciv.models.metadata.GameSettings.GameSettingsMultiplayer
 import java.io.FileNotFoundException
 import java.io.PrintWriter
@@ -332,6 +333,10 @@ class MultiplayerTurnCheckWorker(appContext: Context, workerParams: WorkerParame
                     if (currentTurnPlayer.playerId == inputData.getString(USER_ID)!! && foundGame == null) {
                         foundGame = Pair(gameNames[idx], gameIds[idx])
                     }
+                } catch (ex: MultiplayerServerOfflineException) {
+                    // Unciv Online: the host PC is simply off - not an error, check again after the normal delay
+                    Log.i(LOG_TAG, "doWork server offline (host PC off?), next check in $configuredDelay: ${ex.cause?.let { "${it::class.simpleName}: ${it.message}" }}")
+                    break
                 } catch (ex: FileStorageRateLimitReached) {
                     Log.i(LOG_TAG, "doWork FileStorageRateLimitReached ${ex.message}")
                     // We just break here as the configured delay is probably enough to wait for the rate limit anyway

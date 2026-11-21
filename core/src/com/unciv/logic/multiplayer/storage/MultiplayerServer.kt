@@ -11,6 +11,9 @@ import com.unciv.logic.UncivKtor
 import com.unciv.logic.files.FileConversions
 import com.unciv.logic.files.UncivFiles
 import com.unciv.logic.multiplayer.ServerFeatureSet
+import com.unciv.online.MultiplayerServerOfflineException
+import com.unciv.online.OnlineServer
+import com.unciv.utils.Log
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -61,7 +64,28 @@ class MultiplayerServer(
     suspend fun checkServerStatus(): Boolean {
         val server = getServerUrl()
         val isAliveSuffix = "/isalive"
-        val resp = UncivKtor.client.get("$server$isAliveSuffix")
+        val url = "$server$isAliveSuffix"
+        val start = System.currentTimeMillis()
+        Log.info(OnlineServer.tag, "Server check: GET %s (keyPresent=%s)", url, OnlineServer.hasSharedKey)
+        val resp = try {
+            OnlineServer.httpClient.get(url) {
+                for ((name, value) in OnlineServer.keyHeader()) header(name, value)
+            }
+        } catch (ex: Exception) {
+            val elapsed = System.currentTimeMillis() - start
+            if (OnlineServer.isOfflineCause(ex)) {
+                Log.warn(OnlineServer.tag, "Server check: %s unreachable after %dms - %s: %s", url, elapsed, ex::class.simpleName, ex.message)
+                throw MultiplayerServerOfflineException(ex)
+            }
+            Log.warn(OnlineServer.tag, "Server check: $url failed after ${elapsed}ms", ex)
+            throw ex
+        }
+        val elapsed = System.currentTimeMillis() - start
+        Log.info(OnlineServer.tag, "Server check: %s -> HTTP %s in %dms", url, resp.status.value, elapsed)
+        if (!resp.status.isSuccess()) {
+            val body = try { resp.bodyAsText().take(500) } catch (_: Exception) { "" }
+            OnlineServer.classifyFailure("Server check", url, resp.status.value, body)?.let { throw it }
+        }
 
         if (resp.status.isSuccess()) {
             setFeatureSet(

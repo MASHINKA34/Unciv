@@ -1,6 +1,7 @@
 package com.unciv.ui.screens.multiplayerscreens
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.unciv.Constants
@@ -9,6 +10,8 @@ import com.unciv.logic.multiplayer.MultiplayerGamePreview
 import com.unciv.logic.multiplayer.storage.MultiplayerAuthException
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.translations.tr
+import com.unciv.online.LobbyClient
+import com.unciv.online.OnlineServer
 import com.unciv.ui.components.widgets.UncivTextField
 import com.unciv.ui.components.extensions.disable
 import com.unciv.ui.components.extensions.enable
@@ -22,6 +25,8 @@ import com.unciv.ui.popups.AuthPopup
 import com.unciv.ui.popups.ConfirmPopup
 import com.unciv.ui.popups.Popup
 import com.unciv.ui.popups.ToastPopup
+import com.unciv.ui.screens.multiplayerscreens.lobby.LobbyHelpers
+import com.unciv.ui.screens.multiplayerscreens.lobby.LobbyListScreen
 import com.unciv.ui.screens.pickerscreens.PickerScreen
 import com.unciv.ui.screens.savescreens.LoadGameScreen
 import com.unciv.utils.Concurrency
@@ -43,6 +48,7 @@ class MultiplayerScreen : PickerScreen() {
 
     private val gameSpecificButtons = listOf(copyGameIdButton, resignButton, deleteButton, renameButton)
 
+    private val lobbyButton = createLobbyButton()
     private val addGameButton = createAddGameButton()
     private val copyUserIdButton = createCopyUserIdButton()
     private val friendsListButton = createFriendsListButton()
@@ -61,6 +67,7 @@ class MultiplayerScreen : PickerScreen() {
         setupRightSideButton()
         
         Concurrency.run("Update all multiplayer games") {
+            syncLobbyGames()
             game.onlineMultiplayer.requestUpdate()
         }
 
@@ -100,6 +107,7 @@ class MultiplayerScreen : PickerScreen() {
 
     private fun getGeneralActionsTable(): Table {
         val generalActions = Table().apply { defaults().pad(10f) }
+        generalActions.add(lobbyButton).row()
         generalActions.add(copyUserIdButton).row()
         generalActions.add(addGameButton).row()
         generalActions.add(friendsListButton).row()
@@ -126,6 +134,31 @@ class MultiplayerScreen : PickerScreen() {
             }
         }
         return btn
+    }
+
+    /** Unciv Online: pre-game lobbies on our server - no more exchanging user and game IDs */
+    private fun createLobbyButton(): TextButton {
+        val btn = "Lobby".toTextButton().apply { color = Color.GREEN }
+        btn.onClick {
+            LobbyHelpers.ensurePlayerName(this) { game.pushScreen { LobbyListScreen() } }
+        }
+        return btn
+    }
+
+    /**
+     * Unciv Online: games started from a lobby while this player was not looking appear in the list by themselves.
+     * Errors (server off) are only logged here - the game list shows the server state anyway.
+     */
+    private suspend fun syncLobbyGames() {
+        try {
+            val added = LobbyClient.syncLobbyGames()
+            if (added.isNotEmpty()) Concurrency.runOnGLThread {
+                gameList.update()
+                ToastPopup("New games from lobbies: [${added.joinToString()}]", this@MultiplayerScreen)
+            }
+        } catch (ex: Exception) {
+            Log.warn(OnlineServer.tag, "Lobby games sync failed: ${ex::class.simpleName}: ${ex.message}")
+        }
     }
 
     private fun createAddGameButton(): TextButton {

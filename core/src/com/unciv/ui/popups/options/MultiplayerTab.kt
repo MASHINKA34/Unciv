@@ -12,6 +12,9 @@ import com.unciv.logic.multiplayer.storage.AuthStatus
 import com.unciv.logic.multiplayer.storage.FileStorageRateLimitReached
 import com.unciv.logic.multiplayer.storage.MultiplayerAuthException
 import com.unciv.models.translations.tr
+import com.unciv.online.MultiplayerServerOfflineException
+import com.unciv.online.OnlineKeyRejectedException
+import com.unciv.online.OnlineServer
 import com.unciv.ui.audio.SoundPlayer
 import com.unciv.ui.components.extensions.addSeparator
 import com.unciv.ui.components.extensions.isEnabled
@@ -24,6 +27,7 @@ import com.unciv.ui.popups.options.MultiplayerSelectBoxHelpers.RefreshSelectOpti
 import com.unciv.ui.popups.AuthPopup
 import com.unciv.ui.popups.Popup
 import com.unciv.utils.Concurrency
+import com.unciv.utils.Log
 import com.unciv.utils.launchOnGLThread
 import java.net.URI
 import java.time.temporal.ChronoUnit
@@ -139,8 +143,11 @@ internal class MultiplayerTab(
                 open(true)
             }
 
-            successfullyConnectedToServer { connectionSuccess, authSuccess ->
-                if (authSuccess == false) {
+            successfullyConnectedToServer { connectionSuccess, authSuccess, error ->
+                if (error is MultiplayerServerOfflineException || error is OnlineKeyRejectedException) {
+                    // Unciv Online: host PC is off / wrong APK - say so instead of asking for a password
+                    popup.reuseWith(error.message, true)
+                } else if (authSuccess == false) {
                     popup.close()
                     AuthPopup(optionsPopup.stageToShowOn) { success ->
                         popup.apply {
@@ -232,26 +239,33 @@ internal class MultiplayerTab(
         return turnCheckerSelect
     }
 
-    private fun successfullyConnectedToServer(action: (Boolean, Boolean?) -> Unit) {
+    private fun successfullyConnectedToServer(action: (Boolean, Boolean?, Exception?) -> Unit) {
         Concurrency.run("TestIsAlive") {
             try {
                 val connectionSuccess = mpServer.checkServerStatus()
                 var authSuccess: Boolean? = null
+                var authError: Exception? = null
                 if (connectionSuccess) {
                     try {
                         authSuccess = mpServer.authenticate(null)
                     } catch (_: MultiplayerAuthException) {
                         authSuccess = false
+                    } catch (ex: MultiplayerServerOfflineException) {
+                        authError = ex
+                    } catch (ex: OnlineKeyRejectedException) {
+                        authError = ex
                     } catch (_: Throwable) {
                         // We ignore the exception here, because we handle the failed auth onGLThread
                     }
                 }
+                Log.info(OnlineServer.tag, "Check connection: connected=%s auth=%s error=%s", connectionSuccess, authSuccess, authError?.message)
                 launchOnGLThread {
-                    action(connectionSuccess, authSuccess)
+                    action(connectionSuccess, authSuccess, authError)
                 }
-            } catch (_: Exception) {
+            } catch (ex: Exception) {
+                Log.warn(OnlineServer.tag, "Check connection failed: ${ex::class.simpleName}: ${ex.message}")
                 launchOnGLThread {
-                    action(false, false)
+                    action(false, false, ex)
                 }
             }
         }

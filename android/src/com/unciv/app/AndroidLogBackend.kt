@@ -50,6 +50,14 @@ class AndroidLogBackend(private val activity: Activity) : LogBackend {
         Log.e(toAndroidTag(tag), "[$curThreadName] $msg")
     }
 
+    override fun info(tag: Tag, curThreadName: String, msg: String) {
+        Log.i(toAndroidTag(tag), "[$curThreadName] $msg")
+    }
+
+    override fun warn(tag: Tag, curThreadName: String, msg: String) {
+        Log.w(toAndroidTag(tag), "[$curThreadName] $msg")
+    }
+
     override fun isRelease(): Boolean {
         return isRelease
     }

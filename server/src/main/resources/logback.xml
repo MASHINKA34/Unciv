@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Unciv Online server logging: console + rotating files.
+    UNCIV_LOG_DIR  - log folder (system property -DUNCIV_LOG_DIR=... or environment variable), default ./logs
+    LOG_LEVEL      - level of our "UncivServer" logger: INFO by default, DEBUG to see every file read
+    UNCIV_CONSOLE_LEVEL - lowest level printed to the console, INFO by default; OFF when started hidden (autostart)
+    Files: uncivserver.log, rotated daily and at 10 MB, kept 30 days, at most 500 MB in total.
+-->
+<configuration>
+    <property name="LOG_DIR" value="${UNCIV_LOG_DIR:-logs}"/>
+    <property name="PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{24} - %msg%n"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>${UNCIV_CONSOLE_LEVEL:-INFO}</level>
+        </filter>
+        <encoder>
+            <pattern>${PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/uncivserver.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/uncivserver.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>${PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- Library noise: Netty and Ktor internals only when something goes wrong -->
+    <logger name="io.netty" level="WARN"/>
+    <logger name="io.ktor" level="INFO"/>
+    <logger name="UncivServer" level="${LOG_LEVEL:-INFO}"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>
+    </root>
+</configuration>

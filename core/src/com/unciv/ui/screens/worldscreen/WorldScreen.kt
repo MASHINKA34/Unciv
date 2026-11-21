@@ -20,6 +20,9 @@ import com.unciv.logic.map.HexCoord
 import com.unciv.logic.multiplayer.MultiplayerGameUpdated
 import com.unciv.logic.multiplayer.storage.FileStorageRateLimitReached
 import com.unciv.logic.multiplayer.storage.MultiplayerAuthException
+import com.unciv.online.MultiplayerServerOfflineException
+import com.unciv.online.OnlineKeyRejectedException
+import com.unciv.online.OnlineServer
 import com.unciv.logic.trade.TradeEvaluation
 import com.unciv.models.TutorialTrigger
 import com.unciv.models.metadata.GameSetupInfo
@@ -70,6 +73,7 @@ import com.unciv.ui.screens.worldscreen.unit.actions.UnitActionsTable
 import com.unciv.ui.screens.worldscreen.worldmap.WorldMapHolder
 import com.unciv.ui.screens.worldscreen.worldmap.WorldMapTileUpdater.updateTiles
 import com.unciv.utils.Concurrency
+import com.unciv.utils.Log
 import com.unciv.utils.debug
 import com.unciv.utils.launchOnGLThread
 import com.unciv.utils.launchOnThreadPool
@@ -633,6 +637,16 @@ class WorldScreen(
                     } while (retryUpload)
                 } catch (ex: Exception) { // non-auth exceptions
                     when (ex) {
+                        // Unciv Online: host PC off or wrong APK - a plain, translated message instead of a stack trace
+                        is MultiplayerServerOfflineException, is OnlineKeyRejectedException -> {
+                            Log.warn(OnlineServer.tag, "Next turn: upload of game %s failed, will retry: %s", gameInfoClone.gameId, ex.message)
+                            launchOnGLThread {
+                                val cantUploadNewGamePopup = Popup(this@WorldScreen)
+                                cantUploadNewGamePopup.addGoodSizedLabel(ex.message).row()
+                                cantUploadNewGamePopup.addCloseButton()
+                                cantUploadNewGamePopup.open()
+                            }
+                        }
                         is FileStorageRateLimitReached -> {
                             val message = "Server limit reached! Please wait for [${ex.limitRemainingSeconds}] seconds"
                             launchOnGLThread {
