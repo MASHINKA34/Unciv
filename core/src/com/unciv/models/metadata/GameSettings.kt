@@ -441,9 +441,13 @@ class GameSettings {
         fun applyBakedDefaultServer() {
             val baked = OnlineServer.defaultServerUrl
             if (appliedDefaultServer == baked) return
+            // A field equal to its default is not written to the settings file, so after an update
+            // the server may already read as the new default
             val followsDefault = server == appliedDefaultServer || server == Constants.uncivXyzServer
-                || server == Constants.dropboxMultiplayerServer || appliedDefaultServer.isEmpty() && server == baked
-            if (followsDefault) {
+                || server == Constants.dropboxMultiplayerServer
+            if (server == baked) {
+                Log.info(OnlineServer.tag, "Server is the built-in default '%s' (previous default '%s')", baked, appliedDefaultServer)
+            } else if (followsDefault) {
                 Log.info(OnlineServer.tag, "Default server changed: '%s' -> '%s' (previous default '%s')", server, baked, appliedDefaultServer)
                 server = baked
             } else {
