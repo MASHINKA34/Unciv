@@ -434,7 +434,7 @@ private class UncivServerRunner : CliktCommand() {
 
                 install(Authentication) {
                     basic {
-                        realm = "Optional for /files and /auth, Mandatory for /chat"
+                        realm = "Optional for /files, /auth and /chat"
 
                         @OptIn(ExperimentalUuidApi::class) validate {
                             return@validate try {
@@ -593,13 +593,17 @@ private class UncivServerRunner : CliktCommand() {
                                 return@webSocket close()
                             }
 
+                            // Unciv Online: the shared key already keeps strangers out, so a player without a server
+                            // password may chat too (upstream demanded a password, which our players never set).
+                            // A player who did set a password still has to send the right one.
                             val serverPassword = authMap[authInfo.userId]
-                            if (serverPassword == null || serverPassword != authInfo.password) {
-                                serverLog.warn("[{}] Chat refused for user {}: {}", call.rid, authInfo.userId, if (serverPassword == null) "no password set" else "wrong password")
+                            if (serverPassword != null && serverPassword != authInfo.password) {
+                                serverLog.warn("[{}] Chat refused for user {}: wrong password", call.rid, authInfo.userId)
                                 sendSerialized(Response.Error("Authentication failed!"))
                                 return@webSocket close()
                             }
-                            serverLog.info("[{}] Chat session opened for user {}", call.rid, authInfo.userId)
+                            serverLog.info("[{}] Chat session opened for user {} ({})", call.rid, authInfo.userId,
+                                if (serverPassword == null) "no password set, allowed by shared key" else "password ok")
 
                             try {
                                 while (isActive) {
