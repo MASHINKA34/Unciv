@@ -148,7 +148,10 @@ object CityResources {
         for (building in city.cityConstructions.getBuiltBuildings()) {
             // Free buildings cost no resources
             if (building.name in freeBuildings) continue
-            resourceSupplyList.subtractResourceRequirements(building.getResourceRequirementsPerTurn(city.state), city.getRuleset(), "Buildings")
+            // Unciv Online: every copy of a repeatable building consumes its resources
+            repeat(city.cityConstructions.getBuiltCount(building)) {
+                resourceSupplyList.subtractResourceRequirements(building.getResourceRequirementsPerTurn(city.state), city.getRuleset(), "Buildings")
+            }
         }
         return resourceSupplyList
     }

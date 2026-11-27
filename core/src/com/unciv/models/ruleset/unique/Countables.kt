@@ -178,11 +178,13 @@ enum class Countables(
             }
             return cities.sumOf { city ->
                 // Pure time optimization, intersecting both ways gives the same result
-                val builtBuildings = city.cityConstructions.builtBuildings
+                // Unciv Online: every copy of a repeatable building counts (getBuiltCount is 1 for ordinary buildings)
+                val constructions = city.cityConstructions
+                val builtBuildings = constructions.builtBuildings
                 if (matchingBuildings.size <= builtBuildings.size)
-                    matchingBuildings.count { it in builtBuildings }
+                    matchingBuildings.sumOf { if (it in builtBuildings) constructions.getBuiltCount(it) else 0 }
                 else
-                    builtBuildings.count { it in matchingBuildings }
+                    builtBuildings.sumOf { if (it in matchingBuildings) constructions.getBuiltCount(it) else 0 }
             }
         }
         override fun getErrorSeverity(parameterText: String, ruleset: Ruleset): UniqueType.UniqueParameterErrorSeverity? =
@@ -198,7 +200,8 @@ enum class Countables(
                 .filter { it.isAlive() && it.matchesFilter(civFilter, gameContext) }
                 .sumOf { civ ->
                     civ.cities.sumOf { city ->
-                        city.cityConstructions.getBuiltBuildings().count { it.matchesFilter(buildingFilter, gameContext) }
+                        city.cityConstructions.getBuiltBuildings().filter { it.matchesFilter(buildingFilter, gameContext) }
+                            .sumOf { city.cityConstructions.getBuiltCount(it) } // Unciv Online: copies of repeatable buildings count
                     }
                 }
         }

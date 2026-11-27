@@ -480,8 +480,8 @@ class CityStats(val city: City) {
         newStatsBonusTree.addStats(getStatPercentBonusesFromUnitSupply(), "Unit Supply")
         newStatsBonusTree.add(getStatsPercentBonusesFromUniquesBySource(currentConstruction))
         
-        for (building in city.cityConstructions.getBuiltBuildings())
-            newStatsBonusTree.addStats(building.getStatPercentageBonuses(city),
+        for (building in city.cityConstructions.getBuiltBuildings()) // Unciv Online: times the copies of a repeatable building
+            newStatsBonusTree.addStats(building.getStatPercentageBonuses(city) * city.cityConstructions.getBuiltCount(building),
                 "Buildings", building.name)
 
 

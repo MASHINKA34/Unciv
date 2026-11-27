@@ -389,6 +389,12 @@ enum class UniqueType(
     MustNotBeNextTo("Must not be next to [tileFilter]", UniqueTarget.Building),
 
     Unsellable("Unsellable", UniqueTarget.Building),
+    /** Unciv Online: see [com.unciv.logic.city.CityConstructions.getBuiltCount] */
+    Repeatable("Can be constructed repeatedly", UniqueTarget.Building,
+        docDescription = "After completion the building stays available for construction, and it can be queued several times. " +
+            "The city counts the copies: every copy acts as a separate building (stats, maintenance, provided and consumed resources, uniques), " +
+            "and one-time effects without a trigger condition fire on every construction. " +
+            "Selling removes one copy; on city capture every copy is checked for destruction separately. Not meant for wonders."),
     ObsoleteWith("Obsolete with [tech]", UniqueTarget.Building, UniqueTarget.Resource, UniqueTarget.Improvement),
     IndicatesCapital("Indicates the capital city", UniqueTarget.Building),
     MovesToNewCapital("Moves to new capital when capital changes", UniqueTarget.Building),

@@ -20,7 +20,9 @@ import com.unciv.logic.trade.TradeOfferType
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
 import com.unciv.models.ruleset.unique.UniqueType
+import com.unciv.online.OnlineLogTags
 import com.unciv.ui.components.extensions.toPercent
+import com.unciv.utils.Log
 import com.unciv.utils.withItem
 import com.unciv.utils.withoutItem
 import yairm210.purity.annotations.Readonly
@@ -66,6 +68,14 @@ class CityConquestFunctions(val city: City) {
                 building.hasUnique(UniqueType.MovesToNewCapital, city.state) -> continue // Will move to the civ's new capital
                 building.hasUnique(UniqueType.DestroyedWhenCityCaptured) ->
                     city.cityConstructions.removeBuilding(building)
+                // Unciv Online: every copy of a repeatable building has its own 34% chance of removal
+                building.isRepeatable() -> {
+                    val copies = city.cityConstructions.getBuiltCount(building)
+                    val destroyed = (1..copies).count { tileBasedRandom.nextInt(100) < 34 }
+                    repeat(destroyed) { city.cityConstructions.removeBuildingCopy(building) }
+                    Log.info(OnlineLogTags.repeatable, "City %s captured: %d of %d copies of %s destroyed",
+                        city.name, destroyed, copies, building.name)
+                }
                 // Regular buildings have a 34% chance of removal
                 tileBasedRandom.nextInt(100) < 34 -> city.cityConstructions.removeBuilding(building)
             }
@@ -355,8 +365,11 @@ class CityConquestFunctions(val city: City) {
         for (building in city.cityConstructions.getBuiltBuildings()) {
             val civEquivalentBuilding = newCiv.getEquivalentBuilding(building)
             if (building != civEquivalentBuilding) {
+                val copies = city.cityConstructions.getBuiltCount(building) // Unciv Online: keep the copies of a repeatable building
                 city.cityConstructions.removeBuilding(building)
                 city.cityConstructions.addBuilding(civEquivalentBuilding)
+                if (copies > 1 && civEquivalentBuilding.isRepeatable())
+                    city.cityConstructions.setBuiltCount(civEquivalentBuilding, copies)
             }
         }
 

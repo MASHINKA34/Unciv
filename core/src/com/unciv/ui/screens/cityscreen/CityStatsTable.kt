@@ -301,11 +301,14 @@ class CityStatsTable(private val cityScreen: CityScreen) : Table() {
 
         val icon = ImageGetter.getConstructionPortrait(building.name, 50f)
         val isFree = cityScreen.hasFreeBuilding(building)
-        val displayName = if (isFree) "{${building.name}} ({Free})" else building.name
+        // Unciv Online: a repeatable building shows its copy count, e.g. "Hookah Lounge ×3", and the stats of all copies
+        val copies = cityView.constructions.getBuiltCount(building.name)
+        val nameWithCopies = if (building.isRepeatable()) "{${building.name}} ×$copies" else building.name
+        val displayName = if (isFree) "{$nameWithCopies} ({Free})" else nameWithCopies
 
         info.add(displayName.toLabel(fontSize = Constants.defaultFontSize, hideIcons = true)).padBottom(5f).right().row()
 
-        val stats = cityView.getBuildingStats(building).joinToString(separator = " ") {
+        val stats = (cityView.getBuildingStats(building) * copies.coerceAtLeast(1)).joinToString(separator = " ") {
             "" + it.value.toInt() + it.key.character
         }
         statsAndSpecialists.add(stats.toLabel(fontSize = Constants.defaultFontSize)).right()

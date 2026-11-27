@@ -292,7 +292,8 @@ class CityConstructionsTable(private val cityScreen: CityScreen) {
         cityView.updateTileStats() // only once
         for (entry in constructionsSequence.filter { cityConstructions.shouldBeDisplayed(it, queue) }) {
 
-            val useStoredProduction = entry is Building || entry.name !in queue
+            // Unciv Online: a repeatable building already in the queue starts from zero, like a unit
+            val useStoredProduction = (entry is Building && !entry.isRepeatable()) || entry.name !in queue
 
             // this is susceptible to comodification since ANY change in unique sources - for example a new building -
             //   can cause comodification change

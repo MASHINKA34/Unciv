@@ -28,6 +28,8 @@ class CityConstructionsView(private val cityConstructions: CityConstructions, ga
     @Readonly fun isFirstConstructionOfItsKind(queue: List<String>, index: Int, name: String): Boolean =
         cityConstructions.isFirstConstructionOfItsKind(queue, index, name)
     @Readonly fun isBuilt(name: String): Boolean = cityConstructions.isBuilt(name)
+    /** Unciv Online: copies of a repeatable building (1 for an ordinary built building, 0 if not built) */
+    @Readonly fun getBuiltCount(name: String): Int = cityConstructions.getBuiltCount(name)
     @Readonly fun getWorkDone(name: String): Int = cityConstructions.getWorkDone(name)
     @Readonly fun turnsToConstruction(name: String, useStoredProduction: Boolean = true): Int = cityConstructions.turnsToConstruction(name, useStoredProduction)
     // The optional [queue] is a snapshot of [constructionQueue] for callers that check many constructions in a row - see INonPerpetualConstruction.getRejectionReasons

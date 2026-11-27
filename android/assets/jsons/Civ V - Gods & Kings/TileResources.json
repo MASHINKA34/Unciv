@@ -507,5 +507,16 @@
 					"Generated near City States with weight [15]",
 					"Doesn't generate naturally <in [{Forest} {Hill}] tiles>",
 					"Doesn't generate naturally <in [{Tundra} {Forest}] tiles>"]
+	},
+
+	// Unciv Online: provided by the repeatable Hookah Lounge building
+	{
+		"name": "Hookahs",
+		"resourceType": "Strategic",
+		"uniques": ["[+1 Happiness] <for every [Hookahs]>",
+					"AI will buy at [100] Gold",
+					"Excluded from map editor",
+					"Doesn't generate naturally",
+					"Comment [Each Hookah Lounge built gives 1 hookah. Each hookah gives +1 Happiness. Hookahs can be given to other civilizations in a trade]"]
 	}
 ]

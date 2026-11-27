@@ -265,6 +265,8 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
             if (building.isWonder && city.isPuppet) continue
             // We shouldn't try to build wonders in undeveloped cities and empires
             if (building.isWonder && (!cityIsOverAverageProduction || civInfo.cities.sumOf { it.population.population } < 12)) continue
+            // Unciv Online: a repeatable building that is worth happiness (Hookah Lounge) is only built while the empire is short of happiness
+            if (building.isRepeatable() && getHappinessFromProvidedResources(building) > 0f && !isShortOfHappiness()) continue
             addChoice(relativeCostEffectiveness, building, getValueOfBuilding(building, cityBaseline))
         }
     }
@@ -342,9 +344,28 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
         return value
     }
 
+    @Readonly
+    private fun isShortOfHappiness() = civInfo.getHappiness() < 10 || civInfo.getHappiness() < civInfo.cities.size
+
+    /** Unciv Online: happiness per copy of [building] from the resources it provides, when such a resource itself grants
+     *  "[+N Happiness] <for every [resource]>" (Hookahs). The city simulation cannot see it, since resource bonuses are civ-wide. */
+    @Readonly
+    private fun getHappinessFromProvidedResources(building: Building): Float {
+        var happiness = 0f
+        for (provides in building.getMatchingUniques(UniqueType.ProvidesResources, cityState)) {
+            val resource = civInfo.gameInfo.ruleset.tileResources[provides.params[1]] ?: continue
+            val amount = provides.params[0].toFloatOrNull() ?: continue
+            for (statUnique in resource.getMatchingUniques(UniqueType.Stats))
+                if (statUnique.modifiers.any { it.type == UniqueType.ForEveryCountable && it.params[0] == resource.name })
+                    happiness += statUnique.stats.happiness * amount
+        }
+        return happiness
+    }
+
     private fun applyBuildingStats(building: Building, cityBaseline: Stats): Float {
         val buildingStats = getStatDifferenceFromBuilding(building.name, cityBaseline)
         buildingStats.add(getBuildingStatsFromUniques(building, buildingStats))
+        buildingStats.happiness += getHappinessFromProvidedResources(building) // Unciv Online
 
         buildingStats.food *= 3
 
@@ -352,7 +373,7 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
 
         buildingStats.gold *= 2 // Everything's weighed by rankStatsValue, which ranks gold at 0.3, let's make that 0.6 (vs Science being 1)
 
-        if (civInfo.getHappiness() < 10 || civInfo.getHappiness() < civInfo.cities.size)
+        if (isShortOfHappiness())
             buildingStats.happiness *= 3
 
         if (city.cityStats.currentCityStats.culture < 2) {
@@ -381,8 +402,12 @@ class ConstructionAutomation(val cityConstructions: CityConstructions) {
     private fun getStatDifferenceFromBuilding(building: String, cityBaseline: Stats): Stats {
         val newCity = city.clone()
         newCity.setTransients(city.civ) // Will break the owned tiles. Needs to be reverted before leaving this function
-        newCity.cityConstructions.builtBuildings.add(building)
-        newCity.cityConstructions.setTransients()
+        val newConstructions = newCity.cityConstructions
+        // Unciv Online: for a repeatable building that is already built, simulate one more copy
+        if (newConstructions.isBuilt(building) && city.getRuleset().buildings[building]?.isRepeatable() == true)
+            newConstructions.repeatableBuildingCounts[building] = newConstructions.getBuiltCount(building) + 1
+        else newConstructions.builtBuildings.add(building)
+        newConstructions.setTransients()
         newCity.cityStats.update(updateCivStats = false, calculateGrowthModifiers = false)
         city.expansion.setTransients() // Revert owned tiles to original city
         return newCity.cityStats.currentCityStats - cityBaseline

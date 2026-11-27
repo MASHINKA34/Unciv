@@ -107,9 +107,11 @@ class ConstructionInfoTable(val cityScreen: CityScreen) : Table() {
             if (construction is INonPerpetualConstruction && "require" in description)
                 tryAddShowMissingCities(cityConstructions, construction)
 
-            if (cityConstructions.isBuilt(construction.name)) {
+            val isBuilt = cityConstructions.isBuilt(construction.name)
+            if (isBuilt)
                 showSellButton(construction)
-            } else if (buyButtonFactory.hasBuyButtons(construction)) {
+            // Unciv Online: another copy of a built repeatable building can be bought too
+            if ((!isBuilt || (construction as? Building)?.isRepeatable() == true) && buyButtonFactory.hasBuyButtons(construction)) {
                 row()
                 for (button in buyButtonFactory.getBuyButtons(construction)) {
                     selectedConstructionTable.add(button).padTop(5f).colspan(2).center().row()

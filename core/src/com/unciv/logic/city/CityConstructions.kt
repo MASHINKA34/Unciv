@@ -30,11 +30,13 @@ import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.ruleset.unit.BaseUnit
 import com.unciv.models.stats.Stat
 import com.unciv.models.stats.Stats
+import com.unciv.online.OnlineLogTags
 import com.unciv.ui.components.extensions.toPercent
 import com.unciv.ui.components.fonts.Fonts
 import com.unciv.ui.screens.civilopediascreen.CivilopediaCategories
 import com.unciv.ui.screens.civilopediascreen.FormattedLine
 import com.unciv.ui.screens.pickerscreens.PromotionTree
+import com.unciv.utils.Log
 import com.unciv.utils.withItem
 import com.unciv.utils.withoutItem
 import yairm210.purity.annotations.Cache
@@ -93,6 +95,8 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     //region Serialized Fields
 
     var builtBuildings = HashSet<String>()
+    /** Unciv Online: number of copies of each built [repeatable][Building.isRepeatable] building - see [getBuiltCount] */
+    var repeatableBuildingCounts = HashMap<String, Int>()
     val inProgressConstructions = HashMap<String, Int>()
     var currentConstructionIsUserSet = false
     @Volatile
@@ -111,6 +115,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     fun clone(): CityConstructions {
         val toReturn = CityConstructions()
         toReturn.builtBuildings.addAll(builtBuildings)
+        toReturn.repeatableBuildingCounts.putAll(repeatableBuildingCounts)
         toReturn.inProgressConstructions.putAll(inProgressConstructions)
         toReturn.currentConstructionIsUserSet = currentConstructionIsUserSet
         toReturn.constructionQueue = ArrayList(constructionQueue)
@@ -139,7 +144,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     fun getStats(): StatTreeNode = timeThis("CityConstructions.getStats") {
         @LocalState val stats = StatTreeNode()
         for (building in getBuiltBuildings())
-            stats.addStats(building.getStats(city), building.name)
+            stats.addStats(building.getStats(city) * getBuiltCount(building), building.name)
         return stats
     }
 
@@ -160,7 +165,7 @@ class CityConstructions : IsPartOfGameInfoSerialization {
                 if (building.matchesFilter(unique.params[1]))
                     maintenanceForThisBuilding *= unique.params[0].toPercent()
 
-            maintenanceCost += maintenanceForThisBuilding
+            maintenanceCost += maintenanceForThisBuilding * getBuiltCount(building)
         }
 
         return maintenanceCost
@@ -191,6 +196,14 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     @Readonly fun getCurrentConstruction(): IConstruction = getConstruction( currentConstructionName())
 
     @Readonly fun isBuilt(buildingName: String): Boolean = builtBuildings.contains(buildingName)
+
+    /** Unciv Online: how many copies of [buildingName] this city has - 0 if not built, 1 for an ordinary building,
+     *  1..n for a [repeatable][Building.isRepeatable] one. Every copy acts as a separate building. */
+    @Readonly fun getBuiltCount(buildingName: String): Int =
+        if (!isBuilt(buildingName)) 0 else (repeatableBuildingCounts[buildingName] ?: 1).coerceAtLeast(1)
+
+    /** Same as above for a built [building] */
+    @Readonly fun getBuiltCount(building: Building): Int = getBuiltCount(building.name)
 
     // Note: There was a isEnqueued here functionally identical to isBeingConstructedOrEnqueued,
     // which was calling both isEnqueued and isBeingConstructed - BUT:  currentConstructionName() is just a
@@ -344,6 +357,12 @@ class CityConstructions : IsPartOfGameInfoSerialization {
             city.getRuleset().buildings[it]
                     ?: throw java.lang.Exception("Building $it is not found!")
         })
+        // Unciv Online: a count without its building (removed by an older client or by backward compatibility) is stale
+        val staleCounts = repeatableBuildingCounts.keys.filter { it !in builtBuildings }
+        if (staleCounts.isNotEmpty()) {
+            Log.warn(OnlineLogTags.repeatable, "City %s: dropping copy counts of buildings that are not built: %s", city.name, staleCounts)
+            for (name in staleCounts) repeatableBuildingCounts.remove(name)
+        }
         updateUniques(true)
     }
 
@@ -642,14 +661,24 @@ class CityConstructions : IsPartOfGameInfoSerialization {
                     tryAddFreeBuildings: Boolean = true) {
         val buildingName = building.name
         val civ = city.civ
+        // Unciv Online: another copy of an already built repeatable building only raises its count
+        val isAnotherCopy = building.isRepeatable() && isBuilt(buildingName)
 
         if (building.cityHealth > 0) {
             // city built a building that increases health so add a portion of this added health that is
             // proportional to the city's current health
             city.health += (building.cityHealth.toFloat() * city.health.toFloat() / city.getMaxHealth().toFloat()).toInt()
         }
-        builtBuildingObjects = builtBuildingObjects.withItem(building)
-        builtBuildings.add(buildingName)
+        if (isAnotherCopy) {
+            repeatableBuildingCounts[buildingName] = getBuiltCount(buildingName) + 1
+        } else {
+            builtBuildingObjects = builtBuildingObjects.withItem(building)
+            builtBuildings.add(buildingName)
+            if (building.isRepeatable()) repeatableBuildingCounts[buildingName] = 1
+        }
+        if (building.isRepeatable())
+            Log.info(OnlineLogTags.repeatable, "City %s (%s): added a copy of %s, now x%d (turn %d)",
+                city.name, civ.civID, buildingName, getBuiltCount(buildingName), civ.gameInfo.turns)
 
         updateUniques()
 
@@ -727,9 +756,14 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         if (buildingObject != null) removeBuilding(buildingObject)
     }
 
+    /** Removes the building with all its copies. For one copy of a repeatable building see [removeBuildingCopy] */
     fun removeBuilding(building: Building) {
+        if (building.isRepeatable() || building.name in repeatableBuildingCounts)
+            Log.info(OnlineLogTags.repeatable, "City %s (%s): removing %s with all %d copies",
+                city.name, city.civ.civID, building.name, getBuiltCount(building))
         builtBuildingObjects = builtBuildingObjects.withoutItem(building)
         builtBuildings.remove(building.name)
+        repeatableBuildingCounts.remove(building.name)
         
         if (building.hasCreateOneImprovementUnique()){
             val improvement = building.getImprovementToCreate(city.getRuleset(), city.civ)!!
@@ -740,12 +774,45 @@ class CityConstructions : IsPartOfGameInfoSerialization {
         updateUniques()
     }
 
+    /** Unciv Online: removes one copy of a [repeatable][Building.isRepeatable] building (selling, capture, developer panel).
+     *  The last copy - or a building that is not repeatable - is removed as a whole via [removeBuilding]. */
+    fun removeBuildingCopy(building: Building) {
+        val count = getBuiltCount(building)
+        if (count <= 0) {
+            Log.warn(OnlineLogTags.repeatable, "City %s: cannot remove a copy of %s - not built", city.name, building.name)
+            return
+        }
+        if (count == 1 || !building.isRepeatable()) {
+            removeBuilding(building)
+            return
+        }
+        repeatableBuildingCounts[building.name] = count - 1
+        Log.info(OnlineLogTags.repeatable, "City %s (%s): removed a copy of %s, now x%d",
+            city.name, city.civ.civID, building.name, count - 1)
+        updateUniques()
+    }
+
+    /** Unciv Online: sets the copy count of an already built [repeatable][Building.isRepeatable] building without firing
+     *  its construction triggers (used when a building is swapped for a civ-specific equivalent on city capture) */
+    fun setBuiltCount(building: Building, count: Int) {
+        if (!building.isRepeatable() || !isBuilt(building.name) || count < 1) {
+            Log.warn(OnlineLogTags.repeatable, "City %s: cannot set copy count of %s to %d (repeatable=%s, built=%s)",
+                city.name, building.name, count, building.isRepeatable(), isBuilt(building.name))
+            return
+        }
+        repeatableBuildingCounts[building.name] = count
+        Log.info(OnlineLogTags.repeatable, "City %s (%s): copy count of %s set to x%d", city.name, city.civ.civID, building.name, count)
+        updateUniques()
+    }
+
     private fun updateUniques(onLoadGame: Boolean = false) {
         builtBuildingUniqueMap.clear()
         containedBuildingFiltersCache.clear()
 
         for (building in getBuiltBuildings())
-            builtBuildingUniqueMap.addUniques(building.uniqueObjects)
+            repeat(getBuiltCount(building)) { // Unciv Online: every copy of a repeatable building acts as a separate building
+                builtBuildingUniqueMap.addUniques(building.uniqueObjects)
+            }
         if (!onLoadGame) {
             city.civ.cache.updateCitiesConnectedToCapital(false) // could be a connecting building, like a harbor
             city.cityStats.update()
@@ -945,7 +1012,8 @@ class CityConstructions : IsPartOfGameInfoSerialization {
     fun canAddToQueue(construction: IConstruction, queue: List<String> = constructionQueue): Boolean {
         // [queue] is a snapshot: by default taken here, otherwise by a caller that checks several things in a row
         if (queue.size >= queueMaxSize) return false
-        if (construction is Building && queue.contains(construction.name)) return false
+        // Unciv Online: a repeatable building can be queued several times, like a unit
+        if (construction is Building && !construction.isRepeatable() && queue.contains(construction.name)) return false
         // For limited constructions this counts everything already queued, in this city too - the queue is passed explicitly
         return if (construction is INonPerpetualConstruction) construction.isBuildable(this, queue)
             else construction.isBuildable(this)

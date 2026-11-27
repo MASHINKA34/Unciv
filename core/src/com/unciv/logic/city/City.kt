@@ -339,9 +339,10 @@ class City : IsPartOfGameInfoSerialization, INamed {
         else -> getStatReserve(stat) >= price
     }
 
-    @Readonly internal fun getMaxHealth() = 200 + cityConstructions.getBuiltBuildings().sumOf { it.cityHealth }
+    // Unciv Online: every copy of a repeatable building counts
+    @Readonly internal fun getMaxHealth() = 200 + cityConstructions.getBuiltBuildings().sumOf { it.cityHealth * cityConstructions.getBuiltCount(it) }
 
-    @Readonly fun getStrength() = cityConstructions.getBuiltBuildings().sumOf { it.cityStrength }.toFloat()
+    @Readonly fun getStrength() = cityConstructions.getBuiltBuildings().sumOf { it.cityStrength * cityConstructions.getBuiltCount(it) }.toFloat()
 
     /** Gets max air units that can remain in the city untransported */
     @Readonly fun getMaxAirUnits(): Int = civ.gameInfo.ruleset.modOptions.constants.cityAirUnitCapacity +
@@ -539,7 +540,9 @@ class City : IsPartOfGameInfoSerialization, INamed {
     }
 
     fun sellBuilding(building: Building) {
-        cityConstructions.removeBuilding(building)
+        // Unciv Online: selling a repeatable building removes one copy
+        if (building.isRepeatable()) cityConstructions.removeBuildingCopy(building)
+        else cityConstructions.removeBuilding(building)
         civ.addGold(getGoldForSellingBuilding(building.name))
         hasSoldBuildingThisTurn = true
 

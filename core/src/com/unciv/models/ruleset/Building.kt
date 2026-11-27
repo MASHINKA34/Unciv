@@ -38,6 +38,8 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
     var isWonder = false
     var isNationalWonder = false
     @Readonly fun isAnyWonder() = isWonder || isNationalWonder
+    /** Unciv Online: [UniqueType.Repeatable] - the city keeps a copy count, see [CityConstructions.getBuiltCount] */
+    @Readonly fun isRepeatable(): Boolean = hasUnique(UniqueType.Repeatable)
     var requiredBuilding: String? = null
 
     /** A strategic resource that will be consumed by this building */
@@ -255,7 +257,7 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
     }
 
     override fun shouldBeDisplayed(cityConstructions: CityConstructions, queue: List<String>): Boolean {
-        if (name in queue)
+        if (name in queue && !isRepeatable()) // a repeatable building can be queued again, like a unit
             return false
         for (unique in getMatchingUniques(UniqueType.MaxNumberBuildable)) {
             if (cityConstructions.city.civ.civConstructions.countConstructedObjects(this, cityConstructions.city, queue) >= unique.params[0].toInt())
@@ -283,7 +285,7 @@ class Building : RulesetStatsObject(), INonPerpetualConstruction {
         val civ = city.civ
         val stateForConditionals = city.state
 
-        if (cityConstructions.isBuilt(name))
+        if (cityConstructions.isBuilt(name) && !isRepeatable())
             yield(RejectionReasonType.AlreadyBuilt.toInstance())
 
         if (civ.gameInfo.isUnavailableBySettingsCached(this@Building)) {

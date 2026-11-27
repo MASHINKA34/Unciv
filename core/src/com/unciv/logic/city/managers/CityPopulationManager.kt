@@ -270,7 +270,9 @@ class CityPopulationManager : IsPartOfGameInfoSerialization {
     fun getMaxSpecialists(): Counter<String> {
         val counter = Counter<String>()
         for (building in city.cityConstructions.getBuiltBuildings())
-            counter.add(building.newSpecialists())
+            repeat(city.cityConstructions.getBuiltCount(building)) { // Unciv Online: every copy of a repeatable building
+                counter.add(building.newSpecialists())
+            }
         return counter
     }
 }
