@@ -14,6 +14,7 @@ import com.unciv.logic.map.tile.Tile
 import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.metadata.Player
 import com.unciv.models.ruleset.Ruleset
+import com.unciv.online.DebugWorldSetup
 import com.unciv.models.ruleset.RulesetCache
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueTriggerActivation
@@ -73,6 +74,10 @@ class GameStarter private constructor(
         if (!ruleset.speeds.containsKey(gameSetupInfo.gameParameters.speed)) {
             gameSetupInfo.gameParameters.speed = ruleset.speeds.keys.first()
         }
+
+        // Unciv Online: the debug world of developer mode games replaces the map and city-state settings
+        if (DebugWorldSetup.isRequested(gameSetupInfo.gameParameters))
+            DebugWorldSetup.prepareSetup(gameSetupInfo)
 
         var phaseOneChosenCivs: List<Player> = emptyList() // Never used, but the compiler needs it due to runAndMeasure capturing the var
         if (gameSetupInfo.mapParameters.name != "") runAndMeasure("loadMap") {
@@ -137,6 +142,10 @@ class GameStarter private constructor(
         runAndMeasure("Starting stats") {
             addCivStats()
         }
+
+        // Unciv Online: cities, technologies, gold and units of the debug world
+        if (DebugWorldSetup.isRequested(gameSetupInfo.gameParameters))
+            DebugWorldSetup.apply(gameInfo)
 
         // remove starting locations once we're done
         tileMap.clearStartingLocations()

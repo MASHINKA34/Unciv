@@ -30,6 +30,13 @@
 					"Provides [1] [Hookahs]",
 					"Comment [Can be built in the same city again and again. Each Hookah Lounge gives 1 hookah, and each hookah gives +1 Happiness. Hookahs can be sold and bought]"]
 	},
+	// Unciv Online: given to every city of the developer mode "debug world", never built normally
+	{
+		"name": "Debug Factory",
+		"cost": 0,
+		"percentStatBonus": {"production": 1000},
+		"uniques": ["Unbuildable", "Unsellable", "Will not be displayed in Civilopedia"]
+	},
 	{
 		"name": "Stele",
         "replaces": "Monument",
