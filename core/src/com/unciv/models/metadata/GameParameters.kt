@@ -33,6 +33,11 @@ class GameParameters : IsPartOfGameInfoSerialization { // Default values are the
     var noStartBias = false
     var shufflePlayerOrder = false
 
+    /** Unciv Online: a sandbox game - every player has the developer panel (see DevPanelPopup). Not remembered for the next new game. */
+    var developerMode = false
+    /** Unciv Online: with [developerMode], the game starts in the fixed "debug world" (see DebugWorldSetup) */
+    var debugWorld = false
+
     var victoryTypes: ArrayList<String> = arrayListOf()
     var startingEra = "Ancient era"
 
@@ -93,6 +98,9 @@ class GameParameters : IsPartOfGameInfoSerialization { // Default values are the
         parameters.espionageEnabled = espionageEnabled
         parameters.noStartBias = noStartBias
         parameters.shufflePlayerOrder = shufflePlayerOrder
+        // Unciv Online: copied, since lobbies clone the setup; GameSetupInfo resets them for the next new game
+        parameters.developerMode = developerMode
+        parameters.debugWorld = debugWorld
         parameters.victoryTypes = ArrayList(victoryTypes)
         parameters.startingEra = startingEra
         parameters.showCivilizationStats = showCivilizationStats
@@ -128,6 +136,8 @@ class GameParameters : IsPartOfGameInfoSerialization { // Default values are the
             if (oneCityChallenge) yield("OCC")
             if (!nuclearWeaponsEnabled) yield("No nukes")
             if (godMode) yield("God mode")
+            if (developerMode) yield("Developer mode")
+            if (debugWorld) yield("Debug world")
             yield("Enabled Victories: " + victoryTypes.joinToString())
             yield(baseRuleset)
             yield(if (mods.isEmpty()) "no mods" else mods.joinToString(",", "mods=(", ")", 6) )

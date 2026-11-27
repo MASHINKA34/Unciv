@@ -7,6 +7,7 @@ import com.unciv.models.metadata.GameSetupInfo
 import com.unciv.models.metadata.Player
 import com.unciv.models.translations.tr
 import com.unciv.online.LobbyClient
+import com.unciv.online.DeveloperMode
 import com.unciv.online.LobbyInfo
 import com.unciv.online.OnlineServer
 import com.unciv.ui.components.widgets.UncivTextField
@@ -72,6 +73,8 @@ object LobbyHelpers {
             else "{World Size}: {${map.mapSize.name}}, {${map.type}}"
         val aiCount = parameters.players.count { it.playerType == PlayerType.AI }
         if (aiCount > 0) lines += "{AI players}: $aiCount"
+        if (parameters.developerMode) lines += DeveloperMode.LOBBY_SUMMARY_LINE
+        if (parameters.developerMode && parameters.debugWorld) lines += DeveloperMode.LOBBY_SUMMARY_DEBUG_WORLD_LINE
         return lines
     }
 

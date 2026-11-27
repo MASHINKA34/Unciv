@@ -25,11 +25,19 @@ import com.unciv.ui.popups.Popup
 import com.unciv.ui.screens.UniqueBuilderScreen
 import com.unciv.ui.screens.devconsole.CliInput.Companion.splitToCliInput
 import com.unciv.ui.screens.worldscreen.WorldScreen
+import com.unciv.online.DevPanelActions
+import com.unciv.online.DeveloperMode
+import com.unciv.online.OnlineLogTags
 import com.unciv.utils.Concurrency
+import com.unciv.utils.Log
 import org.jetbrains.annotations.VisibleForTesting
 
 
-class DevConsolePopup(val screen: WorldScreen) : Popup(screen, Scrollability.DevConsole) {
+/**
+ * @param showPopup Unciv Online: `false` creates an invisible instance that only runs commands via [executeCommand]
+ *                  (the command field of [DevPanelPopup])
+ */
+class DevConsolePopup(val screen: WorldScreen, private val showPopup: Boolean = true) : Popup(screen, Scrollability.DevConsole) {
     companion object {
         private const val maxHistorySize = 42
 
@@ -109,9 +117,10 @@ class DevConsolePopup(val screen: WorldScreen) : Popup(screen, Scrollability.Dev
         keyShortcuts.add(Input.Keys.UP) { navigateHistory(-1) }
         keyShortcuts.add(Input.Keys.DOWN) { navigateHistory(1) }
 
-        open(true)
-
-        screen.stage.keyboardFocus = textField
+        if (showPopup) {
+            open(true)
+            screen.stage.keyboardFocus = textField
+        }
     }
 
     override fun validate() {
@@ -231,6 +240,7 @@ class DevConsolePopup(val screen: WorldScreen) : Popup(screen, Scrollability.Dev
 
     private fun onEnter() {
         val handleCommandResponse = handleCommand()
+        logCommand(textField.text, handleCommandResponse)
         if (handleCommandResponse.isOK) {
             screen.shouldUpdate = true
             addHistory()
@@ -280,6 +290,29 @@ class DevConsolePopup(val screen: WorldScreen) : Popup(screen, Scrollability.Dev
     private fun handleCommand(): DevConsoleResponse {
         val params = textField.text.trim().splitToCliInput()
         return commandRoot.handle(this, params)
+    }
+
+    /** Unciv Online: runs one console command without the popup (developer panel), with the same logging and notifications */
+    internal fun executeCommand(command: String): DevConsoleResponse {
+        val response = try {
+            commandRoot.handle(this, command.trim().splitToCliInput())
+        } catch (ex: Exception) {
+            Log.warn(OnlineLogTags.devPanel, "Console command '$command' crashed", ex)
+            DevConsoleResponse.error("${ex::class.simpleName}: ${ex.message}")
+        }
+        logCommand(command, response)
+        if (response.isOK) screen.shouldUpdate = true
+        return response
+    }
+
+    /** Unciv Online: every console command goes to the log; in developer mode games a successful one is also reported to all players */
+    private fun logCommand(command: String, response: DevConsoleResponse) {
+        if (command.isBlank()) return
+        val selectedTile = screen.mapHolder.selectedTile?.position()?.let { gameInfo.tileMap[it] }
+        Log.info(OnlineLogTags.devPanel, "Turn %d, %s: console command '%s' at tile %s -> %s %s", gameInfo.turns,
+            screen.viewingCiv.civID, command, selectedTile?.position, if (response.isOK) "OK" else "refused:", response.message ?: "")
+        if (response.isOK && DeveloperMode.isOn(gameInfo))
+            DevPanelActions(gameInfo, screen.viewingCiv).reportConsoleCommand(command, selectedTile)
     }
 
     private fun getAutocomplete(): Pair<Int,String>? {

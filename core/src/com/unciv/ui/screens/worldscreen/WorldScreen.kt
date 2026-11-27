@@ -20,8 +20,10 @@ import com.unciv.logic.map.HexCoord
 import com.unciv.logic.multiplayer.MultiplayerGameUpdated
 import com.unciv.logic.multiplayer.storage.FileStorageRateLimitReached
 import com.unciv.logic.multiplayer.storage.MultiplayerAuthException
+import com.unciv.online.DeveloperMode
 import com.unciv.online.MultiplayerServerOfflineException
 import com.unciv.online.OnlineKeyRejectedException
+import com.unciv.online.OnlineLogTags
 import com.unciv.online.OnlineServer
 import com.unciv.logic.trade.TradeEvaluation
 import com.unciv.models.TutorialTrigger
@@ -57,6 +59,7 @@ import com.unciv.ui.screens.worldscreen.minimap.MapOverlayToggleButton
 import com.unciv.ui.screens.worldscreen.minimap.Minimap
 import com.unciv.ui.screens.worldscreen.minimap.MinimapHolder
 import com.unciv.ui.screens.worldscreen.status.AutoPlayStatusButton
+import com.unciv.ui.screens.worldscreen.status.DevPanelButton
 import com.unciv.ui.screens.worldscreen.status.MultiplayerStatusButton
 import com.unciv.ui.screens.worldscreen.status.NextTurnButton
 import com.unciv.ui.screens.worldscreen.status.NextTurnProgress
@@ -350,8 +353,18 @@ class WorldScreen(
         globalShortcuts.add(KeyboardBinding.DeveloperConsole, action = ::openDeveloperConsole)
     }
 
-    @Readonly
-    fun openDeveloperConsole() {
+    fun openDeveloperConsole() { // Unciv Online: no longer @Readonly - it logs refusals
+        // Unciv Online: in a developer mode game every player may use the console, but only in their own turn -
+        // only the current player's game state reaches the server
+        if (DeveloperMode.isOn(gameInfo)) {
+            if (!canChangeState) {
+                Log.info(OnlineLogTags.devPanel, "Console refused for %s: not their turn (current player %s)", viewingCiv.civID, gameInfo.currentPlayer)
+                ToastPopup("Available only in your turn", this)
+                return
+            }
+            DevConsolePopup(this)
+            return
+        }
         // No cheating unless you're by yourself, ignoring a possible spectator
         if (gameInfo.civilizations.count { it.isHuman() && !it.isSpectator } > 1) return
         DevConsolePopup(this)
@@ -749,6 +762,7 @@ class WorldScreen(
 
         updateAutoPlayStatusButton()
         updateMultiplayerStatusButton()
+        updateDevPanelButton()
 
         statusButtons.update(false)
         val maxWidth = stage.width - techPolicyAndDiplomacy.width - 25f
@@ -771,6 +785,15 @@ class WorldScreen(
                 autoPlay.stopAutoPlay()
             }
         }
+    }
+
+    /** Unciv Online: every player of a developer mode game gets the panel button; other games never have it */
+    private fun updateDevPanelButton() {
+        val shouldShow = DeveloperMode.isOn(gameInfo) && !viewingCiv.isSpectator
+        if (shouldShow && statusButtons.devPanelButton == null)
+            statusButtons.devPanelButton = DevPanelButton(this)
+        else if (!shouldShow && statusButtons.devPanelButton != null)
+            statusButtons.devPanelButton = null
     }
 
     private fun updateMultiplayerStatusButton() {

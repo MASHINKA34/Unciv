@@ -59,6 +59,11 @@ enum class Proximity : IsPartOfGameInfoSerialization {
 
 class Civilization : IsPartOfGameInfoSerialization {
 
+    companion object {
+        /** Unciv Online: origin of [developerResourceSupply] in resource breakdowns (translatable) */
+        const val DEVELOPER_PANEL_RESOURCE_ORIGIN = "Developer panel"
+    }
+
     @Transient
     private var workerAutomationCache: WorkerAutomation? = null
     /** Returns an instance of WorkerAutomation valid for the duration of the current turn
@@ -210,6 +215,10 @@ class Civilization : IsPartOfGameInfoSerialization {
     var flagsCountdown = HashMap<String, Int>()
 
     var resourceStockpiles = Counter<String>()
+
+    /** Unciv Online: permanent per-turn resource supply (or deficit) granted from the developer panel in developer mode games,
+     *  added to the civ's resources with the origin [DEVELOPER_PANEL_RESOURCE_ORIGIN] - see CivInfoTransientCache.updateCivResources */
+    var developerResourceSupply = Counter<String>()
 
     /** Arraylist instead of HashMap as the same unique might appear multiple times
      * We don't use pairs, as these cannot be serialized due to having no no-arg constructor
@@ -370,6 +379,7 @@ class Civilization : IsPartOfGameInfoSerialization {
         toReturn.hasMovedAutomatedUnits = hasMovedAutomatedUnits
         toReturn.statsHistory = statsHistory.clone()
         toReturn.resourceStockpiles = resourceStockpiles.clone()
+        toReturn.developerResourceSupply = developerResourceSupply.clone()
         return toReturn
     }
 

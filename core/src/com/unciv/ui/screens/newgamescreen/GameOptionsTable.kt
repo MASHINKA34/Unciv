@@ -17,6 +17,7 @@ import com.unciv.models.ruleset.nation.Nation
 import com.unciv.models.ruleset.unique.GameContext
 import com.unciv.models.ruleset.unique.UniqueType
 import com.unciv.models.translations.tr
+import com.unciv.online.OnlineLogTags
 import com.unciv.ui.audio.MusicMood
 import com.unciv.ui.audio.MusicTrackChooserFlags
 import com.unciv.ui.components.InputDisabling
@@ -36,6 +37,7 @@ import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.popups.Popup
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.screens.multiplayerscreens.MultiplayerHelpers
+import com.unciv.utils.Log
 import kotlin.reflect.KMutableProperty0
 import kotlin.reflect.KMutableProperty1
 
@@ -124,7 +126,7 @@ class GameOptionsTable(
         val expander = ExpanderTab(
             "Advanced Settings",
             icon = ImageGetter.getImage("OtherIcons/Settings").apply { setSize(20f, 20f) },
-            startsOutOpened = gameParameters.enableRandomNationsPool,
+            startsOutOpened = gameParameters.enableRandomNationsPool || gameParameters.developerMode,
             persistenceID = "GameOptionsTable.Advanced"
         ) {
             it.defaults().pad(5f, 0f)
@@ -153,6 +155,7 @@ class GameOptionsTable(
                 }
                 it.add(statsTable).left()
             }
+            it.addDeveloperModeCheckboxes()
         }
         add(expander).pad(10f).row()
 
@@ -173,6 +176,27 @@ class GameOptionsTable(
         checkbox.align(Align.left)
         add(checkbox).colspan(2).row()
         return checkbox
+    }
+
+    /** Unciv Online: sandbox games - see GameParameters.developerMode / debugWorld */
+    private fun Table.addDeveloperModeCheckboxes() {
+        addCheckbox("Developer mode", gameParameters.developerMode) {
+            gameParameters.developerMode = it
+            if (!it) gameParameters.debugWorld = false
+            Log.info(OnlineLogTags.devPanel, "New game settings: developer mode %s", if (it) "on" else "off")
+            update() // to show or hide the debug world checkbox
+        }
+        if (!gameParameters.developerMode) return
+        val debugWorldTable = Table().apply { defaults().left().padLeft(30f) }
+        debugWorldTable.addCheckbox("Debug world", gameParameters.debugWorld) {
+            gameParameters.debugWorld = it
+            Log.info(OnlineLogTags.devPanel, "New game settings: debug world %s", if (it) "on" else "off")
+            update()
+        }
+        if (gameParameters.debugWorld)
+            debugWorldTable.add("Exactly 2 players. The map, cities, technologies and units are set up automatically, without city-states and barbarians"
+                .toLabel(fontSize = 14).apply { wrap = true }).width(300f).colspan(2).row()
+        add(debugWorldTable).left().row()
     }
 
     private fun Table.addNoCityRazingCheckbox() =

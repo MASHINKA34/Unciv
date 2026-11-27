@@ -373,6 +373,12 @@ class CivInfoTransientCache(val civInfo: Civilization) {
         for (diplomacyManager in civInfo.diplomacy.values)
             newDetailedCivResources.add(diplomacyManager.resourcesFromTrade())
 
+        // Unciv Online: resources granted or taken away with the developer panel (developer mode games only)
+        for ((resourceName, amount) in civInfo.developerResourceSupply) {
+            val resource = civInfo.gameInfo.ruleset.tileResources[resourceName] ?: continue
+            if (amount != 0) newDetailedCivResources.add(resource, Civilization.DEVELOPER_PANEL_RESOURCE_ORIGIN, amount)
+        }
+
         for (unit in civInfo.units.getCivUnits())
             newDetailedCivResources.subtractResourceRequirements(
                 unit.getResourceRequirementsPerTurn(), civInfo.gameInfo.ruleset, "Units")

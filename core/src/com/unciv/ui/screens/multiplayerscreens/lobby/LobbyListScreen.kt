@@ -5,6 +5,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Table
 import com.badlogic.gdx.scenes.scene2d.ui.TextButton
 import com.unciv.Constants
 import com.unciv.models.translations.tr
+import com.unciv.online.DeveloperMode
 import com.unciv.online.LobbyClient
 import com.unciv.online.LobbyInfo
 import com.unciv.ui.components.extensions.disable
@@ -104,7 +105,8 @@ class LobbyListScreen : PickerScreen() {
 
         listTable.clear()
         for (lobby in lobbies) {
-            val text = lobby.name + "\n" + "Host:".tr() + " " + lobby.hostName + "   " +
+            val devMarker = if (DeveloperMode.LOBBY_SUMMARY_LINE in lobby.settings) DeveloperMode.markerSuffix() else ""
+            val text = lobby.name + devMarker + "\n" + "Host:".tr() + " " + lobby.hostName + "   " +
                 "Players:".tr() + " ${lobby.players.size}/${lobby.maxPlayers}" +
                 (if (lobby.isMember(myId)) "   " + "(you are in this lobby)".tr() else "")
             val button = TextButton(text, BaseScreen.skin)

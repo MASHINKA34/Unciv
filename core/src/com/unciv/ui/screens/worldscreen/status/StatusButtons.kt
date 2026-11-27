@@ -9,6 +9,8 @@ class StatusButtons(
     var autoPlayStatusButton: AutoPlayStatusButton? = null
     var multiplayerStatusButton: MultiplayerStatusButton? = null
     var smallUnitButton: SmallUnitButton? = null
+    /** Unciv Online: only in developer mode games */
+    var devPanelButton: DevPanelButton? = null
     private val padXSpace = 10f
     private val padYSpace = 5f
     
@@ -32,7 +34,12 @@ class StatusButtons(
                 row()
                 add(it).padTop(padYSpace).right()
             }
+            devPanelButton?.let {
+                row()
+                add(it).padTop(padYSpace).right()
+            }
         } else {
+            devPanelButton?.let { add(it).padRight(padXSpace).top() }
             multiplayerStatusButton?.let { add(it).padRight(padXSpace).top() }
             autoPlayStatusButton?.let { add(it).padRight(padXSpace).top() }
             smallUnitButton?.let { add(it).padRight(padXSpace).top() }

@@ -17,6 +17,7 @@ import com.unciv.logic.multiplayer.MultiplayerGameUpdateStarted
 import com.unciv.logic.multiplayer.MultiplayerGameUpdateSucceeded
 import com.unciv.logic.multiplayer.MultiplayerGameUpdated
 import com.unciv.logic.multiplayer.isUsersTurn
+import com.unciv.online.DeveloperMode
 import com.unciv.ui.images.ImageGetter
 import com.unciv.ui.screens.basescreen.BaseScreen
 import com.unciv.ui.components.input.onClick
@@ -61,7 +62,9 @@ private class GameDisplay(
 ) : Table(), Comparable<GameDisplay> {
     var gameName: String = multiplayerGameName
         private set
-    val gameButton = TextButton(gameName, BaseScreen.skin)
+    // Unciv Online: developer mode games are marked in the list; gameName itself stays unchanged (it identifies the game)
+    private fun displayText() = if (DeveloperMode.isOn(preview?.gameParameters)) gameName + DeveloperMode.markerSuffix() else gameName
+    val gameButton = TextButton(displayText(), BaseScreen.skin)
     val turnIndicator = createIndicator("OtherIcons/ExclamationMark")
     val errorIndicator = createIndicator("StatIcons/Malcontent")
     val refreshIndicator = createIndicator("EmojiIcons/Turn")
@@ -87,6 +90,7 @@ private class GameDisplay(
         }
         events.receive(MultiplayerGameUpdated::class, isOurGame) {
             preview = it.preview
+            gameButton.setText(displayText())
             updateTurnIndicator()
         }
         events.receive(MultiplayerGameUpdateSucceeded::class, isOurGame) {

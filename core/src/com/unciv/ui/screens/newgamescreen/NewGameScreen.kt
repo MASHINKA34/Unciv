@@ -264,6 +264,13 @@ class NewGameScreen(
             }) return "No human players selected!"
 
         if (gameSetupInfo.gameParameters.victoryTypes.isEmpty()) return "No victory conditions were selected!"
+
+        // Unciv Online: the debug world is laid out for exactly two sides
+        if (gameSetupInfo.gameParameters.developerMode && gameSetupInfo.gameParameters.debugWorld) {
+            val sides = gameSetupInfo.gameParameters.players.count { it.chosenCiv != Constants.spectator }
+            if (sides != 2 || gameSetupInfo.gameParameters.randomNumberOfPlayers)
+                return "Debug world: choose exactly 2 players (Human and Human, or Human and AI)"
+        }
         
         if (mapOptionsTable.mapTypeSelectBox.selected.value == MapGeneratedMainType.custom) {
             val map = try {

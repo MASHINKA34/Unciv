@@ -14,9 +14,17 @@ class GameSetupInfo(
     var mapFile: FileHandle? = null
 
     // This constructor is used for starting a new game from a running one, cloning the setup, including map seed
-    constructor(gameInfo: GameInfo) : this(gameInfo.gameParameters.clone(), gameInfo.tileMap.mapParameters.clone())
+    constructor(gameInfo: GameInfo) : this(gameInfo.gameParameters.clone(), gameInfo.tileMap.mapParameters.clone()) {
+        resetDeveloperOptions()
+    }
     // Cloning constructor used for [fromSettings], reseeds map
     constructor(setup: GameSetupInfo): this(setup.gameParameters.clone(), setup.mapParameters.clone())
+
+    /** Unciv Online: developer mode is never carried over into the next new game (user decision 2026-11-27) */
+    private fun resetDeveloperOptions() {
+        gameParameters.developerMode = false
+        gameParameters.debugWorld = false
+    }
 
     companion object {
         /**
@@ -33,6 +41,7 @@ class GameSetupInfo(
             }
             else GameSetupInfo(lastGameSetup!!).apply {
                 mapParameters.reseed()
+                resetDeveloperOptions()
             }
         }
     }
