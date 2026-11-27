@@ -75,9 +75,12 @@ class GameStarter private constructor(
             gameSetupInfo.gameParameters.speed = ruleset.speeds.keys.first()
         }
 
-        // Unciv Online: the debug world of developer mode games replaces the map and city-state settings
-        if (DebugWorldSetup.isRequested(gameSetupInfo.gameParameters))
-            DebugWorldSetup.prepareSetup(gameSetupInfo)
+        // Unciv Online: the debug world of developer mode games replaces the map and city-state settings -
+        // the next new game starts from the player's own choices, not from the debug world ones
+        val isDebugWorld = DebugWorldSetup.isRequested(gameSetupInfo.gameParameters)
+        val setupToRemember = if (!isDebugWorld) gameSetupInfo
+            else GameSetupInfo(gameSetupInfo).also { it.mapFile = gameSetupInfo.mapFile }
+        if (isDebugWorld) DebugWorldSetup.prepareSetup(gameSetupInfo)
 
         var phaseOneChosenCivs: List<Player> = emptyList() // Never used, but the compiler needs it due to runAndMeasure capturing the var
         if (gameSetupInfo.mapParameters.name != "") runAndMeasure("loadMap") {
@@ -144,8 +147,7 @@ class GameStarter private constructor(
         }
 
         // Unciv Online: cities, technologies, gold and units of the debug world
-        if (DebugWorldSetup.isRequested(gameSetupInfo.gameParameters))
-            DebugWorldSetup.apply(gameInfo)
+        if (isDebugWorld) DebugWorldSetup.apply(gameInfo)
 
         // remove starting locations once we're done
         tileMap.clearStartingLocations()
@@ -159,7 +161,7 @@ class GameStarter private constructor(
         addPlayerIntros()
 
         UncivGame.Current.settings.apply {
-            lastGameSetup = gameSetupInfo
+            lastGameSetup = setupToRemember
             save()
         }
     }

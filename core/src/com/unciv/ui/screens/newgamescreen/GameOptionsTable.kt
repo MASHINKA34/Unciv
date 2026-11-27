@@ -155,6 +155,7 @@ class GameOptionsTable(
                 }
                 it.add(statsTable).left()
             }
+            it.row() // the stats table above does not end its row
             it.addDeveloperModeCheckboxes()
         }
         add(expander).pad(10f).row()

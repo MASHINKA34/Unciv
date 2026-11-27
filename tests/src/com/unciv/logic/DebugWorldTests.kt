@@ -89,6 +89,18 @@ class DebugWorldTests {
     }
 
     @Test
+    fun `the next new game starts from the player's own settings, not the debug world ones`() {
+        startDebugWorld(Player("Japan", PlayerType.AI))
+
+        val remembered = UncivGame.Current.settings.lastGameSetup!!
+        assertEquals(MapSize.Huge.name, remembered.mapParameters.mapSize.name)
+        assertEquals(6, remembered.gameParameters.numberOfCityStates)
+        // and the developer options themselves are reset when the next game is set up
+        val next = GameSetupInfo.fromSettings()
+        assertFalse(next.gameParameters.developerMode || next.gameParameters.debugWorld)
+    }
+
+    @Test
     fun `works with an AI opponent and the map is the same every time`() {
         val first = startDebugWorld(Player("Japan", PlayerType.AI))
         val second = startDebugWorld(Player("Japan", PlayerType.AI))
